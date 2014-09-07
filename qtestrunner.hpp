@@ -26,6 +26,7 @@
 #include <QTest>
 #include <QDir>
 #include <QDebug>
+#include <QTimer>
 
 class TestFactoryBase
 {
@@ -33,8 +34,61 @@ public:
     virtual QObject* createTest() = 0;
 };
 
-class QTestRunner
+class QTestRunner : public QObject
 {
+    Q_OBJECT
+
+private:
+    QCoreApplication* _app;
+
+    explicit QTestRunner(QCoreApplication& app) : QObject()
+    {
+        _app = &app;
+    }
+
+private slots:
+    void run()
+    {
+        bool runAllTests = true;
+        Q_FOREACH(const QString& arg, _app->arguments()) {
+            if (arg.startsWith("-dir=")) {
+                // Run in this directory
+                QDir::setCurrent(arg.mid(5));
+            } else if (arg.startsWith("-test=")) {
+                // Run this test
+                QString testName(arg.mid(6));
+
+                if (!QTestRunner::getTests().contains(testName)) {
+                    qDebug() << "Test" << testName << "not registered";
+                    _app->exit(-1);
+                }
+
+                QScopedPointer<QObject> test(QTestRunner::getTests().value(testName)->createTest());
+                const int ret = QTest::qExec(test.data());
+                qDebug();
+                if (ret != 0)
+                    _app->exit(ret);
+
+                // We have run a test manually, so don't run them all
+                runAllTests = false;
+            }
+        }
+
+        if (runAllTests) {
+            QHash<QString, TestFactoryBase*>& tests(QTestRunner::getTests());
+            for (QHash<QString, TestFactoryBase*>::const_iterator i = tests.constBegin(); i != tests.constEnd(); ++i) {
+                QScopedPointer<QObject> test(i.value()->createTest());
+                const int ret = QTest::qExec(test.data());
+                qDebug();
+                if (ret != 0) {
+                    _app->exit(ret);
+                }
+            }
+        }
+
+        _app->quit();
+    }
+
 public:
     static QHash<QString, TestFactoryBase*>& getTests()
     {
@@ -49,44 +103,12 @@ public:
 
     static int runTests(QCoreApplication& app)
     {
-        bool runAllTests = true;
-        Q_FOREACH(const QString& arg, app.arguments()) {
-            if (arg.startsWith("-dir=")) {
-                // Run in this directory
-                QDir::setCurrent(arg.mid(5));
-            } else if (arg.startsWith("-test=")) {
-                // Run this test
-                QString testName(arg.mid(6));
+        QTestRunner tr(app);
 
-                if (!QTestRunner::getTests().contains(testName)) {
-                    qDebug() << "Test" << testName << "not registered";
-                    return -1;
-                }
+        // Trigger run() from the application event loop.
+        QTimer::singleShot(0, &tr, SLOT(run()));
 
-                QScopedPointer<QObject> test(QTestRunner::getTests().value(testName)->createTest());
-                const int ret = QTest::qExec(test.data());
-                qDebug();
-                if (ret != 0)
-                    return ret;
-
-                // We have run a test manually, so don't run them all
-                runAllTests = false;
-            }
-        }
-
-        if (runAllTests) {
-            QHash<QString, TestFactoryBase*>& tests(QTestRunner::getTests());
-            for (QHash<QString, TestFactoryBase*>::const_iterator i = tests.constBegin(); i != tests.constEnd(); ++i) {
-                QScopedPointer<QObject> test(i.value()->createTest());
-                const int ret = QTest::qExec(test.data());
-                qDebug();
-                if (ret != 0) {
-                    return ret;
-                }
-            }
-        }
-
-        return 0;
+        return app.exec();
     }
 };
 
