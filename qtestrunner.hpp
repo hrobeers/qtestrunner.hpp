@@ -49,6 +49,8 @@ private:
 private slots:
     void run()
     {
+        int retcode = 0;
+
         bool runAllTests = true;
         Q_FOREACH(const QString& arg, _app->arguments()) {
             if (arg.startsWith("-dir=")) {
@@ -60,14 +62,14 @@ private slots:
 
                 if (!QTestRunner::getTests().contains(testName)) {
                     qDebug() << "Test" << testName << "not registered";
-                    _app->exit(-1);
+                    retcode = -1;
                 }
 
                 QScopedPointer<QObject> test(QTestRunner::getTests().value(testName)->createTest());
                 const int ret = QTest::qExec(test.data());
                 qDebug();
                 if (ret != 0)
-                    _app->exit(ret);
+                    retcode = ret;
 
                 // We have run a test manually, so don't run them all
                 runAllTests = false;
@@ -81,12 +83,12 @@ private slots:
                 const int ret = QTest::qExec(test.data());
                 qDebug();
                 if (ret != 0) {
-                    _app->exit(ret);
+                    retcode = ret;
                 }
             }
         }
 
-        _app->quit();
+        _app->exit(retcode);
     }
 
 public:
