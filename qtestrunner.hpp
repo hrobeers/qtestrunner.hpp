@@ -34,19 +34,16 @@ public:
     virtual QObject* createTest() = 0;
 };
 
-class QTestRunner : public QObject
+class QTestRunner
 {
-    Q_OBJECT
-
 private:
     QCoreApplication* _app;
 
-    explicit QTestRunner(QCoreApplication& app) : QObject()
+    explicit QTestRunner(QCoreApplication& app)
     {
         _app = &app;
     }
 
-private slots:
     void run()
     {
         int retcode = 0;
@@ -108,7 +105,7 @@ public:
         QTestRunner tr(app);
 
         // Trigger run() from the application event loop.
-        QTimer::singleShot(0, &tr, SLOT(run()));
+        QTimer::singleShot(0, [&tr]{tr.run();});
 
         return app.exec();
     }
